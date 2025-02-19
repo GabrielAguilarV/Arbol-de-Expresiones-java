@@ -1,0 +1,134 @@
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+// Clase base para nodos del árbol
+abstract class Nodo {
+    abstract double evaluar();
+}
+
+// Nodo de operandos (números)
+class NodoOperando extends Nodo {
+    double valor;
+
+    public NodoOperando(double valor) {
+        this.valor = valor;
+    }
+
+    @Override
+    double evaluar() {
+        return valor;
+    }
+}
+
+// Nodo de operadores (+, -, *, /, ^, √)
+class NodoOperador extends Nodo {
+    char operador;
+    Nodo izquierda, derecha;
+
+    public NodoOperador(char operador, Nodo izquierda, Nodo derecha) {
+        this.operador = operador;
+        this.izquierda = izquierda;
+        this.derecha = derecha;
+    }
+
+    @Override
+    double evaluar() {
+        double valorIzq = izquierda != null ? izquierda.evaluar() : 0;
+        double valorDer = derecha.evaluar();
+
+        switch (operador) {
+            case '+': return valorIzq + valorDer;
+            case '-': return valorIzq - valorDer;
+            case '*': return valorIzq * valorDer;
+            case '/': return valorDer != 0 ? valorIzq / valorDer : Double.NaN;
+            case '^': return Math.pow(valorIzq, valorDer);
+            case '√': return Math.sqrt(valorDer);
+            default: throw new IllegalArgumentException("Operador no válido: " + operador);
+        }
+    }
+}
+
+// Analizador de expresiones
+class AnalizadorExpresion {
+    private static int indice;
+
+    public static Nodo analizar(String expresion) {
+        expresion = expresion.replaceAll("[{}\\[\\]]", ""); // Eliminar {}, []
+        indice = 0;
+        return construirArbol(expresion);
+    }
+
+    private static Nodo construirArbol(String expresion) {
+        Nodo nodo = obtenerTermino(expresion);
+
+        while (indice < expresion.length()) {
+            char operador = expresion.charAt(indice);
+
+            if (operador == '+' || operador == '-') {
+                indice++; // Avanzar el índice
+                Nodo derecha = construirArbol(expresion);
+                nodo = new NodoOperador(operador, nodo, derecha);
+            } else {
+                break;
+            }
+        }
+        return nodo;
+    }
+
+    private static Nodo obtenerTermino(String expresion) {
+        Nodo nodo = obtenerFactor(expresion);
+
+        while (indice < expresion.length()) {
+            char operador = expresion.charAt(indice);
+
+            if (operador == '*' || operador == '/' || operador == '^' || operador == '√') {
+                indice++;
+                Nodo derecha = obtenerFactor(expresion);
+                nodo = new NodoOperador(operador, nodo, derecha);
+            } else {
+                break;
+            }
+        }
+        return nodo;
+    }
+
+    private static Nodo obtenerFactor(String expresion) {
+        char c = expresion.charAt(indice);
+
+        if (c == '(') {
+            indice++;
+            Nodo nodo = construirArbol(expresion);
+            indice++; // Saltar el ')'
+            return nodo;
+        }
+
+        Pattern pattern = Pattern.compile("\\d+(\\.\\d+)?");
+        Matcher matcher = pattern.matcher(expresion.substring(indice));
+
+        if (matcher.find() && matcher.start() == 0) {
+            double numero = Double.parseDouble(matcher.group());
+            indice += matcher.group().length();
+            return new NodoOperando(numero);
+        }
+
+        throw new IllegalArgumentException("Expresión inválida en: " + expresion.substring(indice));
+    }
+}
+
+// Clase principal para probar el árbol de expresiones
+public class ArbolExpresion {
+    public static void main(String[] args) {
+        String expresion1 = "(5 + 7) * (6 - 2)";
+        String expresion2 = "8+1*3^2-6/4+21*4√16";
+        String expresion3 = "((3 + 4) * 2 ) / 7";
+
+        Nodo raiz1 = AnalizadorExpresion.analizar(expresion1);
+        System.out.println("Resultado de '" + expresion1 + "': " + raiz1.evaluar());
+
+        Nodo raiz2 = AnalizadorExpresion.analizar(expresion2);
+        System.out.println("Resultado de '" + expresion2 + "': " + raiz2.evaluar());
+
+        Nodo raiz3 = AnalizadorExpresion.analizar(expresion3);
+        System.out.println("Resultado de '" + expresion3 + "': " + raiz3.evaluar());
+    }
+}
