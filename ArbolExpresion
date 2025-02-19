@@ -1,12 +1,13 @@
+import java.util.Stack;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// Clase base para nodos del árbol
+// Clase base para los nodos del árbol de expresiones
 abstract class Nodo {
     abstract double evaluar();
 }
 
-// Nodo de operandos (números)
+// Nodo hoja (representa operandos)
 class NodoOperando extends Nodo {
     double valor;
 
@@ -20,98 +21,92 @@ class NodoOperando extends Nodo {
     }
 }
 
-// Nodo de operadores (+, -, *, /, ^, √)
+// Nodo operador (realiza operaciones matemáticas)
 class NodoOperador extends Nodo {
     char operador;
-    Nodo izquierda, derecha;
+    Nodo izquierdo, derecho;
 
-    public NodoOperador(char operador, Nodo izquierda, Nodo derecha) {
+    public NodoOperador(char operador, Nodo izquierdo, Nodo derecho) {
         this.operador = operador;
-        this.izquierda = izquierda;
-        this.derecha = derecha;
+        this.izquierdo = izquierdo;
+        this.derecho = derecho;
     }
 
     @Override
     double evaluar() {
-        double valorIzq = izquierda != null ? izquierda.evaluar() : 0;
-        double valorDer = derecha.evaluar();
+        double valorIzquierdo = izquierdo != null ? izquierdo.evaluar() : 0;
+        double valorDerecho = derecho.evaluar();
 
+        // Evaluación de operaciones matemáticas
         switch (operador) {
-            case '+': return valorIzq + valorDer;
-            case '-': return valorIzq - valorDer;
-            case '*': return valorIzq * valorDer;
-            case '/': return valorDer != 0 ? valorIzq / valorDer : Double.NaN;
-            case '^': return Math.pow(valorIzq, valorDer);
-            case '√': return Math.sqrt(valorDer);
-            default: throw new IllegalArgumentException("Operador no válido: " + operador);
+            case '+': return valorIzquierdo + valorDerecho;
+            case '-': return valorIzquierdo - valorDerecho;
+            case '*': return valorIzquierdo * valorDerecho;
+            case '/': return valorDerecho != 0 ? valorIzquierdo / valorDerecho : Double.NaN; // Evita división por 0
+            case '^': return Math.pow(valorIzquierdo, valorDerecho);
+            case '√': return Math.sqrt(valorDerecho); // √(n) representa raíz cuadrada
+            default: throw new IllegalArgumentException("Operador no soportado: " + operador);
         }
     }
 }
 
-// Analizador de expresiones
+// Parser para construir el árbol de expresiones
 class AnalizadorExpresion {
-    private static int indice;
-
     public static Nodo analizar(String expresion) {
-        expresion = expresion.replaceAll("[{}\\[\\]]", ""); // Eliminar {}, []
-        indice = 0;
+        expresion = expresion.replaceAll("[{}\\[\\]]", ""); // Elimina {}, []
         return construirArbol(expresion);
     }
 
     private static Nodo construirArbol(String expresion) {
-        Nodo nodo = obtenerTermino(expresion);
+        Stack<Nodo> pilaOperandos = new Stack<>();
+        Stack<Character> pilaOperadores = new Stack<>();
 
-        while (indice < expresion.length()) {
-            char operador = expresion.charAt(indice);
+        // Expresión regular para detectar números y operadores (incluye √)
+        Pattern patron = Pattern.compile("\\d+(\\.\\d+)?|[+\\-*/^√()]");
+        Matcher coincidencia = patron.matcher(expresion);
 
-            if (operador == '+' || operador == '-') {
-                indice++; // Avanzar el índice
-                Nodo derecha = construirArbol(expresion);
-                nodo = new NodoOperador(operador, nodo, derecha);
-            } else {
-                break;
+        while (coincidencia.find()) {
+            String token = coincidencia.group();
+
+            if (token.matches("\\d+(\\.\\d+)?")) { // Si es número
+                pilaOperandos.push(new NodoOperando(Double.parseDouble(token)));
+            } else if (token.equals("(")) {
+                pilaOperadores.push('(');
+            } else if (token.equals(")")) {
+                while (!pilaOperadores.isEmpty() && pilaOperadores.peek() != '(') {
+                    procesarOperador(pilaOperandos, pilaOperadores.pop());
+                }
+                pilaOperadores.pop(); // Eliminar el '('
+            } else if ("+-*/^√".contains(token)) { // Si es operador
+                char operador = token.charAt(0);
+                while (!pilaOperadores.isEmpty() && precedencia(pilaOperadores.peek()) >= precedencia(operador)) {
+                    procesarOperador(pilaOperandos, pilaOperadores.pop());
+                }
+                pilaOperadores.push(operador);
             }
         }
-        return nodo;
+
+        // Procesar los operadores restantes
+        while (!pilaOperadores.isEmpty()) {
+            procesarOperador(pilaOperandos, pilaOperadores.pop());
+        }
+
+        return pilaOperandos.pop();
     }
 
-    private static Nodo obtenerTermino(String expresion) {
-        Nodo nodo = obtenerFactor(expresion);
-
-        while (indice < expresion.length()) {
-            char operador = expresion.charAt(indice);
-
-            if (operador == '*' || operador == '/' || operador == '^' || operador == '√') {
-                indice++;
-                Nodo derecha = obtenerFactor(expresion);
-                nodo = new NodoOperador(operador, nodo, derecha);
-            } else {
-                break;
-            }
-        }
-        return nodo;
+    private static void procesarOperador(Stack<Nodo> pilaOperandos, char operador) {
+        Nodo derecho = pilaOperandos.pop();
+        Nodo izquierdo = operador == '√' ? null : pilaOperandos.pop();
+        pilaOperandos.push(new NodoOperador(operador, izquierdo, derecho));
     }
 
-    private static Nodo obtenerFactor(String expresion) {
-        char c = expresion.charAt(indice);
-
-        if (c == '(') {
-            indice++;
-            Nodo nodo = construirArbol(expresion);
-            indice++; // Saltar el ')'
-            return nodo;
+    private static int precedencia(char operador) {
+        switch (operador) {
+            case '+': case '-': return 1;
+            case '*': case '/': return 2;
+            case '^': case '√': return 3;
+            default: return -1;
         }
-
-        Pattern pattern = Pattern.compile("\\d+(\\.\\d+)?");
-        Matcher matcher = pattern.matcher(expresion.substring(indice));
-
-        if (matcher.find() && matcher.start() == 0) {
-            double numero = Double.parseDouble(matcher.group());
-            indice += matcher.group().length();
-            return new NodoOperando(numero);
-        }
-
-        throw new IllegalArgumentException("Expresión inválida en: " + expresion.substring(indice));
     }
 }
 
